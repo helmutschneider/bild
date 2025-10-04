@@ -3,6 +3,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 typedef int32_t i32;
 typedef int64_t i64;
