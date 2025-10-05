@@ -15,8 +15,6 @@ static bmp_t bmp_decode(bitstream_t bs)
     bitstream_skip(&bs, 8);
 
     u32 pix_offset = bitstream_read_u32(&bs, 4);
-    printf("pix_offset = %d\n", pix_offset);
-
     u32 dib_size = bitstream_read_u32(&bs, 4);
 
     bmp.dib_size = dib_size;

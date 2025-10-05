@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-std=c17 -Wall -Werror -Wpedantic -O0 -g -I/opt/homebrew/include
+CFLAGS=-std=c17 -Wall -Werror -Wpedantic -O2 -g -I/opt/homebrew/include
 LDFLAGS=-L/opt/homebrew/lib -lSDL3
 
 all:

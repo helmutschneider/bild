@@ -13,6 +13,7 @@ typedef struct
     SDL_Texture *texture;
     pic_t pic;
     u64 ticks;
+    bool needs_redraw;
 } app_t;
 
 SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
@@ -67,6 +68,7 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
 
     app->texture = texture;
     app->pic = pic;
+    app->needs_redraw = true;
 
     *appstate = app;
 
@@ -74,7 +76,9 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
 }
 
 SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
-{
+{    
+    app_t *app = appstate;
+
     switch (event->type)
     {
     case SDL_EVENT_KEY_DOWN:
@@ -83,7 +87,11 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
         {
             return SDL_APP_SUCCESS;
         }
+        break;
     }
+    case SDL_EVENT_WINDOW_RESIZED:
+        app->needs_redraw = true;
+        break;
     case SDL_EVENT_QUIT:
         return SDL_APP_SUCCESS;
     }
@@ -94,6 +102,13 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
 SDL_AppResult SDL_AppIterate(void *appstate)
 {
     app_t *app = appstate;
+
+    if (!app->needs_redraw)
+    {
+        // not sure if this is kosher.
+        SDL_Delay(1);
+        return SDL_APP_CONTINUE;
+    }
 
     u64 ticks = SDL_GetTicks();
     bool do_show_fps = SDL_floor(ticks / 1000.0) != SDL_floor(app->ticks / 1000.0);
@@ -141,6 +156,8 @@ SDL_AppResult SDL_AppIterate(void *appstate)
     SDL_RenderClear(app->renderer);
     SDL_RenderTexture(app->renderer, app->texture, NULL, &rect);
     SDL_RenderPresent(app->renderer);
+
+    app->needs_redraw = false;
 
     return SDL_APP_CONTINUE;
 }
