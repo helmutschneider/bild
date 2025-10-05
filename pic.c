@@ -2,11 +2,11 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <math.h>
 
-bmp_t bmp_decode(uint8_t *data, size_t len)
+static bmp_t bmp_decode(bitstream_t bs)
 {
-    bitstream_t bs = bitstream_init(data, len);
     bmp_t bmp = {0};
 
     u16 magic = bitstream_read_u16(&bs, 2);
@@ -21,13 +21,20 @@ bmp_t bmp_decode(uint8_t *data, size_t len)
 
     bmp.dib_size = dib_size;
 
-    switch (dib_size) {
-        case 12:
-            bmp.dib_variant = BMP_DIB_BITMAPCOREHEADER;
-            break;
-        case 40:
-            bmp.dib_variant = BMP_DIB_BITMAPINFOHEADER;
-            break;
+    switch (dib_size)
+    {
+    case 12:
+        bmp.dib_variant = BMP_DIB_BITMAPCOREHEADER;
+        break;
+    case 40:
+        bmp.dib_variant = BMP_DIB_BITMAPINFOHEADER;
+        break;
+    case 108:
+        bmp.dib_variant = BMP_DIB_BITMAPV4HEADER;
+        break;
+    case 124:
+        bmp.dib_variant = BMP_DIB_BITMAPV5HEADER;
+        break;
     }
 
     u32 width = bitstream_read_u32(&bs, 4);
@@ -51,12 +58,16 @@ bmp_t bmp_decode(uint8_t *data, size_t len)
     assert(num_colors == 0);
 
     bitstream_skip(&bs, 4);
-    assert(bs.offset == 54);
+
+    bs.offset = 0;
+    bitstream_skip(&bs, pix_offset);
 
     bmp.data = malloc(sizeof(pixel_t) * width * height);
 
     for (u32 i = 0; i < height; ++i)
     {
+        // (0, 0) is defined as the bottom left corner.
+        u32 i_rev = height - i - 1;
         u32 prev_offset = bs.offset;
 
         for (u32 k = 0; k < width; ++k)
@@ -73,7 +84,7 @@ bmp_t bmp_decode(uint8_t *data, size_t len)
                 .a = 255,
             };
 
-            bmp.data[(i * width) + k] = px;
+            bmp.data[(i_rev * width) + k] = px;
         }
 
         u32 padding = (bs.offset - prev_offset) % 4;
@@ -83,9 +94,39 @@ bmp_t bmp_decode(uint8_t *data, size_t len)
     return bmp;
 }
 
-void bmp_free(bmp_t pic)
+void pic_free(pic_t pic)
 {
-    free(pic.data);
+    if (pic.format != PIC_FORMAT_BMP)
+    {
+        return;
+    }
+    if (pic.bmp.data != NULL)
+    {
+        free(pic.bmp.data);
+    }
+}
+
+pic_t pic_decode(u8 *data, size_t len)
+{
+    bitstream_t bs = bitstream_init(data, len);
+    u16 magic = bitstream_read_u16(&bs, 2);
+    bs.offset = 0;
+
+    pic_t pic = {
+        .format = PIC_FORMAT_UNKNOWN,
+    };
+
+    if (magic == 0x4D42)
+    {
+        bmp_t bmp = bmp_decode(bs);
+        pic.format = PIC_FORMAT_BMP;
+        pic.width = bmp.width;
+        pic.height = bmp.height;
+        pic.data = bmp.data;
+        pic.bmp = bmp;
+    }
+
+    return pic;
 }
 
 bitstream_t bitstream_init(u8 *data, size_t len)
@@ -132,4 +173,32 @@ u32 bitstream_read_u32(bitstream_t *stream, size_t bytes)
 void bitstream_skip(bitstream_t *stream, size_t bytes)
 {
     stream->offset += bytes;
+}
+
+size_t read_file(const char *name, u8 *out)
+{
+    FILE *handle = fopen(name, "rb");
+
+    if (handle == NULL)
+    {
+        printf("Cannot open %s\n", name);
+        exit(1);
+        return 0;
+    }
+
+    size_t read = 0;
+
+    while (true)
+    {
+        int chunk = fread(out + read, sizeof(u8), 8192, handle);
+        if (chunk == 0)
+        {
+            break;
+        }
+        read += chunk;
+    }
+
+    fclose(handle);
+
+    return read;
 }

@@ -3,34 +3,70 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 #include <stdlib.h>
-#include <stdio.h>
+#include <libgen.h>
 #include "pic.h"
 
 typedef struct
 {
     SDL_Window *window;
     SDL_Renderer *renderer;
+    SDL_Texture *texture;
+    pic_t pic;
     u64 ticks;
 } app_t;
 
 SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
 {
+    if (argc < 2)
+    {
+        SDL_Log("Usage: ./bild [path]");
+        return SDL_APP_FAILURE;
+    }
+
+    u8 *buffer = malloc(sizeof(u8) * 10485760);
+    size_t buffer_size = read_file(argv[1], buffer);
+    free(buffer);
+    pic_t pic = pic_decode(buffer, buffer_size);
+
     if (!SDL_Init(SDL_INIT_VIDEO))
     {
-        SDL_Log("Couldn't initialize SDL: %s", SDL_GetError());
+        SDL_Log("Could not initialize SDL: %s", SDL_GetError());
+        pic_free(pic);
         return SDL_APP_FAILURE;
     }
 
     app_t *app = malloc(sizeof(app_t));
     SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
 
-    if (!SDL_CreateWindowAndRenderer("bild", 640, 480, flags, &app->window, &app->renderer))
+    char *name = basename(argv[1]);
+
+    if (!SDL_CreateWindowAndRenderer(name, pic.width, pic.height, flags, &app->window, &app->renderer))
     {
-        SDL_Log("Couldn't create window/renderer: %s", SDL_GetError());
+        SDL_Log("Could not create window/renderer: %s", SDL_GetError());
+        pic_free(pic);
         return SDL_APP_FAILURE;
     }
 
     SDL_SetRenderVSync(app->renderer, 1);
+    SDL_Texture *texture = SDL_CreateTexture(app->renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, pic.width, pic.height);
+
+    if (texture == NULL)
+    {
+        SDL_Log("Could not create texture: %s", SDL_GetError());
+        pic_free(pic);
+        return SDL_APP_FAILURE;
+    }
+
+    bool ok = SDL_UpdateTexture(texture, NULL, pic.data, pic.width * 4);
+    if (!ok)
+    {
+        SDL_Log("Could not update texture: %s", SDL_GetError());
+        pic_free(pic);
+        return SDL_APP_FAILURE;
+    }
+
+    app->texture = texture;
+    app->pic = pic;
 
     *appstate = app;
 
@@ -66,18 +102,44 @@ SDL_AppResult SDL_AppIterate(void *appstate)
     {
         u64 delta = ticks - app->ticks;
         f64 fps = 1000.0 / ((f64)delta);
-        printf("FPS: %.2f\n", fps);
+        SDL_Log("FPS: %.2f\n", fps);
     }
 
     app->ticks = ticks;
 
-    const double now = ((double)app->ticks) / 1000.0;
-    const float red = (float)(0.5 + 0.5 * SDL_sin(now));
-    const float green = (float)(0.5 + 0.5 * SDL_sin(now + SDL_PI_D * 2 / 3));
-    const float blue = (float)(0.5 + 0.5 * SDL_sin(now + SDL_PI_D * 4 / 3));
+    i32 render_w;
+    i32 render_w_scaled;
+    i32 render_h;
+    i32 render_h_scaled;
 
-    SDL_SetRenderDrawColorFloat(app->renderer, red, green, blue, SDL_ALPHA_OPAQUE_FLOAT);
+    SDL_GetRenderOutputSize(app->renderer, &render_w, &render_h);
+
+    render_w_scaled = render_w;
+    render_h_scaled = render_h;
+
+    f64 render_aspect_ratio = ((f64)render_w) / render_h;
+    f64 bmp_aspect_ratio = ((f64)app->pic.width) / app->pic.height;
+
+    // center the image and preserve its aspect ratio.
+    if (render_aspect_ratio > bmp_aspect_ratio)
+    {
+        render_w_scaled = render_h * bmp_aspect_ratio;
+    }
+    else
+    {
+        render_h_scaled = render_w / bmp_aspect_ratio;
+    }
+
+    SDL_FRect rect = {
+        .x = (render_w - render_w_scaled) / 2,
+        .y = (render_h - render_h_scaled) / 2,
+        .w = render_w_scaled,
+        .h = render_h_scaled,
+    };
+
+    SDL_SetRenderDrawColor(app->renderer, 0, 0, 0, 255);
     SDL_RenderClear(app->renderer);
+    SDL_RenderTexture(app->renderer, app->texture, NULL, &rect);
     SDL_RenderPresent(app->renderer);
 
     return SDL_APP_CONTINUE;
@@ -85,6 +147,13 @@ SDL_AppResult SDL_AppIterate(void *appstate)
 
 void SDL_AppQuit(void *appstate, SDL_AppResult result)
 {
+    if (appstate == NULL)
+    {
+        return;
+    }
+
     app_t *app = appstate;
+    SDL_DestroyTexture(app->texture);
+    pic_free(app->pic);
     free(app);
 }

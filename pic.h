@@ -13,10 +13,11 @@ typedef uint64_t u64;
 typedef float f32;
 typedef double f64;
 
+// ARGB
 typedef struct {
-    u8 r;
-    u8 g;
     u8 b;
+    u8 g;
+    u8 r;
     u8 a;
 } pixel_t;
 
@@ -24,6 +25,8 @@ typedef enum {
     BMP_DIB_UNKNOWN,
     BMP_DIB_BITMAPCOREHEADER,
     BMP_DIB_BITMAPINFOHEADER,
+    BMP_DIB_BITMAPV4HEADER,
+    BMP_DIB_BITMAPV5HEADER,
 } bmp_dib_variant_t;
 
 typedef enum {
@@ -50,6 +53,22 @@ typedef struct {
     pixel_t *data;
 } bmp_t;
 
+typedef enum {
+    PIC_FORMAT_UNKNOWN,
+    PIC_FORMAT_BMP,
+} pic_format_t;
+
+typedef struct {
+    pic_format_t format;
+    u32 width;
+    u32 height;
+    pixel_t *data;
+
+    union {
+        bmp_t bmp;
+    };
+} pic_t;
+
 typedef struct {
     u8 *data;
     size_t data_len;
@@ -62,8 +81,9 @@ u16 bitstream_read_u16(bitstream_t *stream, size_t bytes);
 u32 bitstream_read_u32(bitstream_t *stream, size_t bytes);
 u64 bitstream_read_u64(bitstream_t *stream, size_t bytes);
 void bitstream_skip(bitstream_t *stream, size_t bytes);
+size_t read_file(const char *name, u8 *out);
 
-bmp_t bmp_decode(u8 *data, size_t len);
-void bmp_free(bmp_t pic);
+pic_t pic_decode(u8 *data, size_t len);
+void pic_free(pic_t pic);
 
 #endif
