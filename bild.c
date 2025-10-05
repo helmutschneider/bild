@@ -26,8 +26,8 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
 
     u8 *buffer = malloc(sizeof(u8) * 10485760);
     size_t buffer_size = read_file(argv[1], buffer);
-    free(buffer);
     pic_t pic = pic_decode(buffer, buffer_size);
+    free(buffer);
 
     if (!SDL_Init(SDL_INIT_VIDEO))
     {
